@@ -50,7 +50,7 @@ Finally, with solvepnp function in OpenCV, we can achieve real-time head pose es
 - 室内光などの照明条件によっては、顔検出の精度が影響を受ける場合があります。
 - ヘッドポーズの精度は、顔のランドマーク検出の精度に依存します。
 
-このスクリプトは教育目的で作成されており、商用利用や高度な要件には追加の調整が必要になる場合があります。
+
 
 
 ---------------
@@ -88,5 +88,5 @@ The camera will start, and faces will be tracked in real-time with head pose est
 - Lighting conditions, such as indoor lighting, may affect the accuracy of face detection.
 - The accuracy of the head pose is dependent on the accuracy of facial landmark detection.
 
-This script is created for educational purposes and may require additional adjustments for commercial use or advanced requirements.
+
 
