@@ -49,10 +49,9 @@ def get_head_pose(shape):
 
     _, rotation_vec, translation_vec = cv2.solvePnP(object_pts, image_pts, cam_matrix, dist_coeffs)
 
-    reprojectdst, _ = cv2.projectPoints(reprojectsrc, rotation_vec, translation_vec, cam_matrix,
-                                        dist_coeffs)
+    reprojectdst, _ = cv2.projectPoints(reprojectsrc, rotation_vec, translation_vec, cam_matrix, dist_coeffs)
+    reprojectdst = tuple(map(lambda point: (int(point[0]), int(point[1])), reprojectdst.reshape(8, 2)))
 
-    reprojectdst = tuple(map(tuple, reprojectdst.reshape(8, 2)))
 
     # calc euler angle
     rotation_mat, _ = cv2.Rodrigues(rotation_vec)
