@@ -1,9 +1,8 @@
-#下記のコードは、顔の姿勢を推定するものである。
-
 import cv2
 import dlib
 import numpy as np
 from imutils import face_utils
+from collections import deque
 
 face_landmark_path = './shape_predictor_68_face_landmarks.dat'
 
@@ -15,6 +14,23 @@ D = [7.0834633684407095e-002, 6.9140193737175351e-002, 0.0, 0.0, -1.307346032368
 
 cam_matrix = np.array(K).reshape(3, 3).astype(np.float32)
 dist_coeffs = np.array(D).reshape(5, 1).astype(np.float32)
+
+# 再投影のためのソースポイント
+reprojectsrc = np.float32([[10.0, 10.0, 10.0],
+                           [10.0, 10.0, -10.0],
+                           [10.0, -10.0, -10.0],
+                           [10.0, -10.0, 10.0],
+                           [-10.0, 10.0, 10.0],
+                           [-10.0, 10.0, -10.0],
+                           [-10.0, -10.0, -10.0],
+                           [-10.0, -10.0, 10.0]])
+
+# 再投影ポイント間で描画する線分のペア
+line_pairs = [[0, 1], [1, 2], [2, 3], [3, 0],
+              [4, 5], [5, 6], [6, 7], [7, 4],
+              [0, 4], [1, 5], [2, 6], [3, 7],
+              [4, 5], [5, 6], [6, 7], [7, 4],
+              [0, 4], [1, 5], [2, 6], [3, 7]]
 
 object_pts = np.float32([[6.825897, 6.760612, 4.402142],
                          [1.330353, 7.122144, 6.903745],
@@ -31,39 +47,18 @@ object_pts = np.float32([[6.825897, 6.760612, 4.402142],
                          [0.000000, -3.116408, 6.097667],
                          [0.000000, -7.415691, 4.070434]])
 
-reprojectsrc = np.float32([[10.0, 10.0, 10.0],
-                           [10.0, 10.0, -10.0],
-                           [10.0, -10.0, -10.0],
-                           [10.0, -10.0, 10.0],
-                           [-10.0, 10.0, 10.0],
-                           [-10.0, 10.0, -10.0],
-                           [-10.0, -10.0, -10.0],
-                           [-10.0, -10.0, 10.0]])
+# 移動平均フィルタの設定
+points_history = {i: deque(maxlen=5) for i in range(68)}  # 各点に対して5点分の履歴を保持
 
-line_pairs = [[0, 1], [1, 2], [2, 3], [3, 0],
-              [4, 5], [5, 6], [6, 7], [7, 4],
-              [0, 4], [1, 5], [2, 6], [3, 7]]
-
-# カルマンフィルタの初期化
-stateSize = 6  # [x, y, z, α, β, γ] の6要素 (位置3要素、オイラー角3要素)
-measSize = 6   # 同上
-contrSize = 0  # 制御ベクトルは使用しない
-kalman = cv2.KalmanFilter(stateSize, measSize, contrSize)
-
-# 状態遷移行列 (A) - 単位行列を使用
-kalman.transitionMatrix = np.eye(stateSize, dtype=np.float32)
-
-# 測定行列 (H)
-kalman.measurementMatrix = np.eye(measSize, stateSize, dtype=np.float32)
-
-# プロセスノイズ共分散 (Q)
-kalman.processNoiseCov = np.eye(stateSize, dtype=np.float32) * 1e-4
-
-# 測定ノイズ共分散 (R)
-kalman.measurementNoiseCov = np.eye(measSize, dtype=np.float32) * 1e-2
-
-# 誤差共分散の後続誤差 (P)
-kalman.errorCovPost = np.eye(stateSize, dtype=np.float32)
+def apply_moving_average(shape):
+    """
+    各顔の点に対して移動平均を適用します。
+    """
+    averaged_shape = np.zeros(shape.shape, dtype=np.float32)
+    for i, point in enumerate(shape):
+        points_history[i].appendleft(point)
+        averaged_shape[i] = np.mean(points_history[i], axis=0)
+    return averaged_shape
 
 def get_head_pose(shape):
     image_pts = np.float32([shape[17], shape[21], shape[22], shape[26], shape[36],
@@ -89,29 +84,26 @@ def main():
     
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(face_landmark_path)
-
+    
     while cap.isOpened():
         ret, frame = cap.read()
         if ret:
-            # カルマンフィルタの予測ステップ
-            predicted = kalman.predict()
-
             face_rects = detector(frame, 0)
             if len(face_rects) > 0:
                 shape = predictor(frame, face_rects[0])
                 shape = face_utils.shape_to_np(shape)
+                
+                # 移動平均フィルタを適用
+                averaged_shape = apply_moving_average(shape)
 
-                reprojectdst, euler_angle, rotation_vec, translation_vec = get_head_pose(shape)
-
-                # カルマンフィルタの更新ステップ
-                measurement = np.hstack((translation_vec.flatten(), rotation_vec.flatten()))
-                corrected = kalman.correct(measurement.astype(np.float32))
-
+                reprojectdst, euler_angle, rotation_vec, translation_vec = get_head_pose(averaged_shape)
+                """
                 for (x, y) in shape:
-                    cv2.circle(frame, (x, y), 1, (0, 0, 255), -1)
-
+                    cv2.circle(frame, (x, y), 1, (0,171,255), -1)
+                """
+            
                 for start, end in line_pairs:
-                    cv2.line(frame, reprojectdst[start], reprojectdst[end], (0, 0, 255))
+                    cv2.line(frame, reprojectdst[start], reprojectdst[end], (0, 228, 0),3)
 
                 cv2.putText(frame, "X: " + "{:7.2f}".format(euler_angle[0, 0]), (20, 20), cv2.FONT_HERSHEY_SIMPLEX,
                             0.75, (0, 0, 0), thickness=2)
